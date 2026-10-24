@@ -1,0 +1,85 @@
+name: forge-qa-ci
+on:
+  push:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+    inputs:
+      force_failure:
+        description: forge-qa intentional failure
+        type: boolean
+        default: false
+      hold_seconds:
+        description: forge-qa cancellation fixture sleep duration
+        type: number
+        default: 0
+permissions:
+  contents: read
+jobs:
+  build:
+    name: forge-qa-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: forge-qa grouped output and annotation
+        run: |
+          echo '::group::forge-qa build details'
+          echo 'forge-qa fake build output'
+          echo '::notice file=forge-qa-ci.txt,line=1,title=forge-qa annotation::Fake fixture annotation'
+          echo '::endgroup::'
+          mkdir -p forge-qa-output
+          echo 'forge-qa fake build artifact' > forge-qa-output/forge-qa-build.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-qa-build
+          path: forge-qa-output/
+  test:
+    name: forge-qa-test-${{ matrix.shard }}
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [one, two]
+    steps:
+      - name: forge-qa matrix test
+        env:
+          FORGE_QA_FAIL: ${{ vars.FORGE_QA_FAIL }}
+          FORGE_QA_FORCE: ${{ inputs.force_failure }}
+          FORGE_QA_BRANCH: ${{ github.head_ref || github.ref_name }}
+          FORGE_QA_SHARD: ${{ matrix.shard }}
+        run: |
+          echo '::group::forge-qa test details'
+          echo "forge-qa shard $FORGE_QA_SHARD"
+          echo '::endgroup::'
+          if [ "$FORGE_QA_SHARD" = two ] && { [ "$FORGE_QA_FAIL" = true ] || [ "$FORGE_QA_FORCE" = true ] || [ "$FORGE_QA_BRANCH" = forge-qa-failing ]; }; then
+            echo '::error title=forge-qa intentional failure::Fake test failure for QA'
+            exit 1
+          fi
+      - name: forge-qa long-running cancellation fixture
+        if: inputs.hold_seconds > 0
+        env:
+          FORGE_QA_SLEEP: ${{ inputs.hold_seconds }}
+        run: sleep "$FORGE_QA_SLEEP"
+  report:
+    name: forge-qa-report
+    needs: [build, test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: forge-qa summarize
+        env:
+          FORGE_QA_BUILD: ${{ needs.build.result }}
+          FORGE_QA_TEST: ${{ needs.test.result }}
+        run: |
+          echo "forge-qa build=$FORGE_QA_BUILD test=$FORGE_QA_TEST" > forge-qa-report.txt
+          cat forge-qa-report.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-qa-report
+          path: forge-qa-report.txt
+      - name: forge-qa required result
+        env:
+          FORGE_QA_BUILD: ${{ needs.build.result }}
+          FORGE_QA_TEST: ${{ needs.test.result }}
+        run: test "$FORGE_QA_BUILD" = success && test "$FORGE_QA_TEST" = success

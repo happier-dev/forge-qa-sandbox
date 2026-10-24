@@ -1,0 +1,36 @@
+name: forge-qa-inputs
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: forge-qa string input
+        type: string
+        default: forge-qa-example
+      mode:
+        description: forge-qa choice input
+        type: choice
+        options: [forge-qa-fast, forge-qa-full]
+        default: forge-qa-fast
+      enabled:
+        description: forge-qa boolean input
+        type: boolean
+        default: true
+      count:
+        description: forge-qa number input
+        type: number
+        default: 2
+      target:
+        description: forge-qa environment input
+        type: environment
+        required: true
+permissions:
+  contents: read
+jobs:
+  inputs:
+    name: forge-qa-inputs
+    runs-on: ubuntu-latest
+    steps:
+      - name: forge-qa print fake inputs
+        env:
+          FORGE_QA_INPUTS: ${{ toJSON(inputs) }}
+        run: printf '%s\n' "$FORGE_QA_INPUTS"
